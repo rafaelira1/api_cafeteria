@@ -1,9 +1,10 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 
 ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+OrderStatus = Literal["pending", "preparing", "ready", "delivered", "cancelled"]
 
 
 class ProductBase(BaseModel):
@@ -38,7 +39,8 @@ class OrderBase(BaseModel):
     customer_name: ShortText = Field(max_length=100, examples=["Ana Souza"])
     table_number: int = Field(gt=0, examples=[4])
     payment_method: ShortText = Field(max_length=30, examples=["Pix"])
-    total_amount: float = Field(ge=0, examples=[12.5])
+    quantity: int = Field(gt=0, examples=[2])
+    status: OrderStatus = Field(default="pending", examples=["pending"])
     is_takeaway: bool = Field(examples=[False])
     product_id: int = Field(gt=0, examples=[1])
 
@@ -51,7 +53,8 @@ class OrderUpdate(BaseModel):
     customer_name: ShortText | None = Field(default=None, max_length=100)
     table_number: int | None = Field(default=None, gt=0)
     payment_method: ShortText | None = Field(default=None, max_length=30)
-    total_amount: float | None = Field(default=None, ge=0)
+    quantity: int | None = Field(default=None, gt=0)
+    status: OrderStatus | None = None
     is_takeaway: bool | None = None
     product_id: int | None = Field(default=None, gt=0)
 
@@ -60,6 +63,7 @@ class OrderResponse(OrderBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    total_amount: float = Field(ge=0)
 
 
 class MessageResponse(BaseModel):

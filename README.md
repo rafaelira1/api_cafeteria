@@ -1,6 +1,6 @@
 # Cafeteria API
 
-API REST desenvolvida em Python para gerenciar produtos do cardápio e pedidos de uma cafeteria. O projeto atende aos requisitos da avaliação: possui dois recursos com sete campos cada, CRUD completo, três registros iniciais por recurso, persistência local e respostas com status HTTP coerentes.
+API REST desenvolvida em Python para gerenciar produtos do cardápio e pedidos de uma cafeteria. O projeto atende aos requisitos da avaliação: possui dois recursos com pelo menos sete campos cada, CRUD completo, três registros iniciais por recurso, persistência local e respostas com status HTTP coerentes.
 
 ## Tecnologias
 
@@ -93,7 +93,9 @@ O Swagger permite testar todos os endpoints diretamente pelo navegador.
 | `customer_name` | String | Nome do cliente |
 | `table_number` | Integer | Número da mesa, maior que zero |
 | `payment_method` | String | Forma de pagamento |
-| `total_amount` | Float | Valor total, igual ou maior que zero |
+| `total_amount` | Float | Valor calculado automaticamente pelo preço do produto vezes a quantidade |
+| `quantity` | Integer | Quantidade do produto, maior que zero |
+| `status` | String | Estado do pedido: `pending`, `preparing`, `ready`, `delivered` ou `cancelled` |
 | `is_takeaway` | Boolean | Indica se o pedido é para viagem |
 | `product_id` | Integer | Identificador de um produto existente |
 
@@ -204,20 +206,21 @@ curl -X POST http://127.0.0.1:8000/orders \
     "customer_name": "Daniel Rocha",
     "table_number": 5,
     "payment_method": "Pix",
-    "total_amount": 10.0,
+    "quantity": 2,
+    "status": "pending",
     "is_takeaway": false,
     "product_id": 1
   }'
 ```
 
-O valor de `product_id` precisa corresponder a um produto já cadastrado.
+O valor de `product_id` precisa corresponder a um produto já cadastrado. O campo `total_amount` não deve ser enviado: a API calcula o valor usando o preço atual do produto multiplicado por `quantity`.
 
 ### Editar parcialmente um pedido
 
 ```bash
 curl -X PATCH http://127.0.0.1:8000/orders/4 \
   -H "Content-Type: application/json" \
-  -d '{"payment_method": "Cartão", "is_takeaway": true}'
+  -d '{"payment_method": "Cartão", "quantity": 3, "status": "preparing", "is_takeaway": true}'
 ```
 
 ### Substituir um pedido
@@ -229,7 +232,8 @@ curl -X PUT http://127.0.0.1:8000/orders/4 \
     "customer_name": "Daniel Rocha",
     "table_number": 8,
     "payment_method": "Cartão",
-    "total_amount": 12.0,
+    "quantity": 2,
+    "status": "ready",
     "is_takeaway": true,
     "product_id": 2
   }'

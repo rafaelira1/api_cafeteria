@@ -20,12 +20,18 @@ def find_order(order_id: int, db: Session) -> Order:
     return order
 
 
-def ensure_product_exists(product_id: int, db: Session) -> None:
-    if db.get(Product, product_id) is None:
+def find_product(product_id: int, db: Session) -> Product:
+    product = db.get(Product, product_id)
+    if product is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Produto com ID {product_id} não encontrado.",
         )
+    return product
+
+
+def calculate_total(product: Product, quantity: int) -> float:
+    return round(product.price * quantity, 2)
 
 
 @router.get("", response_model=list[OrderResponse], summary="Listar pedidos")
@@ -51,8 +57,11 @@ def get_order(order_id: int, db: Session = Depends(get_db)):
     summary="Criar pedido",
 )
 def create_order(data: OrderCreate, db: Session = Depends(get_db)):
-    ensure_product_exists(data.product_id, db)
-    order = Order(**data.model_dump())
+    product = find_product(data.product_id, db)
+    order = Order(
+        **data.model_dump(),
+        total_amount=calculate_total(product, data.quantity),
+    )
     db.add(order)
     db.commit()
     db.refresh(order)
@@ -67,9 +76,10 @@ def create_order(data: OrderCreate, db: Session = Depends(get_db)):
 )
 def replace_order(order_id: int, data: OrderCreate, db: Session = Depends(get_db)):
     order = find_order(order_id, db)
-    ensure_product_exists(data.product_id, db)
+    product = find_product(data.product_id, db)
     for field, value in data.model_dump().items():
         setattr(order, field, value)
+    order.total_amount = calculate_total(product, data.quantity)
     db.commit()
     db.refresh(order)
     return order
@@ -84,8 +94,11 @@ def replace_order(order_id: int, data: OrderCreate, db: Session = Depends(get_db
 def update_order(order_id: int, data: OrderUpdate, db: Session = Depends(get_db)):
     order = find_order(order_id, db)
     changes = data.model_dump(exclude_unset=True)
-    if "product_id" in changes:
-        ensure_product_exists(changes["product_id"], db)
+    if "product_id" in changes or "quantity" in changes:
+        product_id = changes.get("product_id", order.product_id)
+        quantity = changes.get("quantity", order.quantity)
+        product = find_product(product_id, db)
+        changes["total_amount"] = calculate_total(product, quantity)
     for field, value in changes.items():
         setattr(order, field, value)
     db.commit()

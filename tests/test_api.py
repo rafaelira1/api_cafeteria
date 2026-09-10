@@ -7,6 +7,7 @@ os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DATABASE}"
 
 from fastapi.testclient import TestClient
 
+from app.database import engine
 from app.main import app
 
 
@@ -15,6 +16,7 @@ def setup_module():
 
 
 def teardown_module():
+    engine.dispose()
     TEST_DATABASE.unlink(missing_ok=True)
 
 
@@ -27,6 +29,8 @@ def test_initial_data():
         assert orders.status_code == 200
         assert len(products.json()) == 3
         assert len(orders.json()) == 3
+        assert orders.json()[0]["quantity"] == 2
+        assert orders.json()[0]["total_amount"] == 10.0
 
 
 def test_product_crud():
@@ -82,12 +86,14 @@ def test_order_crud():
                 "customer_name": "Daniel Rocha",
                 "table_number": 5,
                 "payment_method": "Pix",
-                "total_amount": 10.0,
+                "quantity": 2,
+                "status": "pending",
                 "is_takeaway": False,
                 "product_id": 1,
             },
         )
         assert created.status_code == 201
+        assert created.json()["total_amount"] == 10.0
         order_id = created.json()["id"]
 
         fetched = client.get(f"/orders/{order_id}")
@@ -100,7 +106,8 @@ def test_order_crud():
                 "customer_name": "Daniel Rocha",
                 "table_number": 8,
                 "payment_method": "Dinheiro",
-                "total_amount": 12.0,
+                "quantity": 3,
+                "status": "preparing",
                 "is_takeaway": False,
                 "product_id": 2,
             },
@@ -108,13 +115,22 @@ def test_order_crud():
         assert replaced.status_code == 200
         assert replaced.json()["table_number"] == 8
         assert replaced.json()["product_id"] == 2
+        assert replaced.json()["total_amount"] == 19.5
 
         updated = client.patch(
             f"/orders/{order_id}",
-            json={"payment_method": "Cartão", "is_takeaway": True},
+            json={
+                "payment_method": "Cartão",
+                "quantity": 4,
+                "status": "ready",
+                "is_takeaway": True,
+            },
         )
         assert updated.status_code == 200
         assert updated.json()["payment_method"] == "Cartão"
+        assert updated.json()["quantity"] == 4
+        assert updated.json()["status"] == "ready"
+        assert updated.json()["total_amount"] == 26.0
 
         deleted = client.delete(f"/orders/{order_id}")
         assert deleted.status_code == 204
@@ -132,12 +148,27 @@ def test_errors_and_validation():
                 "customer_name": "Cliente",
                 "table_number": 1,
                 "payment_method": "Pix",
-                "total_amount": 5.0,
+                "quantity": 1,
+                "status": "pending",
                 "is_takeaway": False,
                 "product_id": 9999,
             },
         )
         assert invalid_order.status_code == 404
+
+        invalid_quantity = client.post(
+            "/orders",
+            json={
+                "customer_name": "Cliente",
+                "table_number": 1,
+                "payment_method": "Pix",
+                "quantity": 0,
+                "status": "pending",
+                "is_takeaway": False,
+                "product_id": 1,
+            },
+        )
+        assert invalid_quantity.status_code == 422
 
         invalid_product = client.post(
             "/products",
