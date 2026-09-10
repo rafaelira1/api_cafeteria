@@ -1,7 +1,7 @@
 import os
 import sqlite3
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 
@@ -34,3 +34,13 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def migrate_product_description() -> None:
+    """Add the optional description to existing databases without losing data."""
+    with engine.begin() as connection:
+        columns = inspect(connection).get_columns("products")
+        if not any(column["name"] == "description" for column in columns):
+            connection.execute(
+                text("ALTER TABLE products ADD COLUMN description VARCHAR(1000)")
+            )

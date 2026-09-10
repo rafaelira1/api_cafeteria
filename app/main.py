@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.database import Base, SessionLocal, engine
+from app.database import Base, SessionLocal, engine, migrate_product_description
 from app.routers import orders, products
 from app.seed import populate_database
 
@@ -11,6 +11,7 @@ from app.seed import populate_database
 async def lifespan(app: FastAPI):
     del app
     Base.metadata.create_all(bind=engine)
+    migrate_product_description()
     with SessionLocal() as db:
         populate_database(db)
     yield

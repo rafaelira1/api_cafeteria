@@ -77,6 +77,7 @@ O Swagger permite testar todos os endpoints diretamente pelo navegador.
 
 | Campo | Tipo | Descrição |
 | --- | --- | --- |
+| `description` | String ou null | Descrição opcional do produto, com até 1.000 caracteres (somente Product) |
 | `id` | Integer | Identificador gerado automaticamente |
 | `name` | String | Nome do produto |
 | `category` | String | Categoria do item |
@@ -146,6 +147,7 @@ curl -X POST http://127.0.0.1:8000/products \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Cappuccino",
+    "description": "Café com leite vaporizado e espuma cremosa.",
     "category": "Bebidas",
     "price": 9.5,
     "size": "250ml",

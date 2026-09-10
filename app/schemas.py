@@ -9,6 +9,7 @@ OrderStatus = Literal["pending", "preparing", "ready", "delivered", "cancelled"]
 
 class ProductBase(BaseModel):
     name: ShortText = Field(max_length=100, examples=["Pão de Queijo"])
+    description: str | None = Field(default=None, max_length=1000)
     category: ShortText = Field(max_length=50, examples=["Salgados"])
     price: float = Field(gt=0, examples=[6.5])
     size: ShortText = Field(max_length=30, examples=["Unidade"])
@@ -22,6 +23,7 @@ class ProductCreate(ProductBase):
 
 class ProductUpdate(BaseModel):
     name: ShortText | None = Field(default=None, max_length=100)
+    description: str | None = Field(default=None, max_length=1000)
     category: ShortText | None = Field(default=None, max_length=50)
     price: float | None = Field(default=None, gt=0)
     size: ShortText | None = Field(default=None, max_length=30)

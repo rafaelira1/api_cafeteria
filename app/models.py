@@ -9,6 +9,7 @@ class Product(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     category: Mapped[str] = mapped_column(String(50), nullable=False)
     price: Mapped[float] = mapped_column(Float, nullable=False)
     size: Mapped[str] = mapped_column(String(30), nullable=False)
