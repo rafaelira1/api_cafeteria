@@ -137,6 +137,57 @@ def test_order_crud():
         assert client.get(f"/orders/{order_id}").status_code == 404
 
 
+def test_product_filters():
+    with TestClient(app) as client:
+        available = client.get("/products", params={"is_available": True})
+        assert available.status_code == 200
+        assert len(available.json()) >= 1
+        assert all(item["is_available"] for item in available.json())
+
+        drinks = client.get("/products", params={"category": "Bebidas"})
+        assert drinks.status_code == 200
+        assert all(item["category"] == "Bebidas" for item in drinks.json())
+
+
+def test_order_filters():
+    with TestClient(app) as client:
+        delivered = client.get("/orders", params={"status": "delivered"})
+        assert delivered.status_code == 200
+        assert all(item["status"] == "delivered" for item in delivered.json())
+
+        takeaway = client.get("/orders", params={"is_takeaway": True})
+        assert takeaway.status_code == 200
+        assert all(item["is_takeaway"] for item in takeaway.json())
+
+
+def test_unavailable_product_is_blocked():
+    with TestClient(app) as client:
+        order_payload = {
+            "customer_name": "Cliente Teste",
+            "table_number": 3,
+            "payment_method": "Pix",
+            "quantity": 1,
+            "status": "pending",
+            "is_takeaway": False,
+            "product_id": 3,
+        }
+
+        blocked = client.post("/orders", json=order_payload)
+        assert blocked.status_code == 409
+
+        client.patch("/products/3", json={"is_available": True})
+        allowed = client.post("/orders", json=order_payload)
+        assert allowed.status_code == 201
+        order_id = allowed.json()["id"]
+
+        client.patch("/products/3", json={"is_available": False})
+        blocked_replace = client.put(f"/orders/{order_id}", json=order_payload)
+        assert blocked_replace.status_code == 409
+
+        client.delete(f"/orders/{order_id}")
+        client.patch("/products/3", json={"is_available": True})
+
+
 def test_errors_and_validation():
     with TestClient(app) as client:
         assert client.get("/products/9999").status_code == 404

@@ -22,8 +22,17 @@ def find_product(product_id: int, db: Session) -> Product:
 
 
 @router.get("", response_model=list[ProductResponse], summary="Listar produtos")
-def list_products(db: Session = Depends(get_db)):
-    return db.scalars(select(Product).order_by(Product.id)).all()
+def list_products(
+    category: str | None = None,
+    is_available: bool | None = None,
+    db: Session = Depends(get_db),
+):
+    query = select(Product)
+    if category is not None:
+        query = query.where(Product.category == category)
+    if is_available is not None:
+        query = query.where(Product.is_available == is_available)
+    return db.scalars(query.order_by(Product.id)).all()
 
 
 @router.get(

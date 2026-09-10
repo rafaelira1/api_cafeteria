@@ -1,10 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Order, Product
-from app.schemas import MessageResponse, OrderCreate, OrderResponse, OrderUpdate
+from app.schemas import (
+    MessageResponse,
+    OrderCreate,
+    OrderResponse,
+    OrderStatus,
+    OrderUpdate,
+)
 
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
@@ -34,9 +40,26 @@ def calculate_total(product: Product, quantity: int) -> float:
     return round(product.price * quantity, 2)
 
 
+def ensure_available(product: Product) -> None:
+    if not product.is_available:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"O produto '{product.name}' não está disponível no momento.",
+        )
+
+
 @router.get("", response_model=list[OrderResponse], summary="Listar pedidos")
-def list_orders(db: Session = Depends(get_db)):
-    return db.scalars(select(Order).order_by(Order.id)).all()
+def list_orders(
+    order_status: OrderStatus | None = Query(default=None, alias="status"),
+    is_takeaway: bool | None = None,
+    db: Session = Depends(get_db),
+):
+    query = select(Order)
+    if order_status is not None:
+        query = query.where(Order.status == order_status)
+    if is_takeaway is not None:
+        query = query.where(Order.is_takeaway == is_takeaway)
+    return db.scalars(query.order_by(Order.id)).all()
 
 
 @router.get(
@@ -58,6 +81,7 @@ def get_order(order_id: int, db: Session = Depends(get_db)):
 )
 def create_order(data: OrderCreate, db: Session = Depends(get_db)):
     product = find_product(data.product_id, db)
+    ensure_available(product)
     order = Order(
         **data.model_dump(),
         total_amount=calculate_total(product, data.quantity),
@@ -77,6 +101,7 @@ def create_order(data: OrderCreate, db: Session = Depends(get_db)):
 def replace_order(order_id: int, data: OrderCreate, db: Session = Depends(get_db)):
     order = find_order(order_id, db)
     product = find_product(data.product_id, db)
+    ensure_available(product)
     for field, value in data.model_dump().items():
         setattr(order, field, value)
     order.total_amount = calculate_total(product, data.quantity)
@@ -98,6 +123,8 @@ def update_order(order_id: int, data: OrderUpdate, db: Session = Depends(get_db)
         product_id = changes.get("product_id", order.product_id)
         quantity = changes.get("quantity", order.quantity)
         product = find_product(product_id, db)
+        if "product_id" in changes:
+            ensure_available(product)
         changes["total_amount"] = calculate_total(product, quantity)
     for field, value in changes.items():
         setattr(order, field, value)
