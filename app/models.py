@@ -1,7 +1,45 @@
-from sqlalchemy import Boolean, Float, ForeignKey, Integer, String
+from datetime import datetime, timezone
+from enum import Enum
+
+from sqlalchemy import Boolean, DateTime, Enum as SQLEnum, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+
+class UserRole(str, Enum):
+    ADMIN = "admin"
+    STAFF = "staff"
+    CUSTOMER = "customer"
+
+
+class User(Base):
+    __tablename__ = "users"
+    # Deleted identities must never be reassigned while an old JWT may exist.
+    __table_args__ = {"sqlite_autoincrement": True}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    email: Mapped[str] = mapped_column(
+        String(254, collation="NOCASE"), nullable=False, unique=True, index=True
+    )
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[UserRole] = mapped_column(
+        SQLEnum(
+            UserRole,
+            values_callable=lambda roles: [role.value for role in roles],
+            native_enum=False,
+            create_constraint=True,
+            name="user_role",
+        ),
+        nullable=False,
+        default=UserRole.CUSTOMER,
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
 
 
 class Product(Base):

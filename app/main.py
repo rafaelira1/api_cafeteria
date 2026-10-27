@@ -2,14 +2,16 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.auth.config import get_auth_settings
 from app.database import Base, SessionLocal, engine, migrate_product_description
-from app.routers import orders, products
+from app.routers import auth, orders, products
 from app.seed import populate_database
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     del app
+    get_auth_settings()  # Refuse startup without a strong key and explicit origins.
     Base.metadata.create_all(bind=engine)
     migrate_product_description()
     with SessionLocal() as db:
@@ -29,6 +31,7 @@ app = FastAPI(
 
 app.include_router(products.router)
 app.include_router(orders.router)
+app.include_router(auth.router)
 
 
 @app.get("/", tags=["Status"], summary="Apresentar a API")
