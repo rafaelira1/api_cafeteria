@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.auth.config import get_auth_settings
+from app.bootstrap_demo_users import populate_demo_users
 from app.database import (
     Base,
     SessionLocal,
@@ -22,6 +23,7 @@ async def lifespan(app: FastAPI):
     migrate_product_description()
     migrate_order_user_id()
     with SessionLocal() as db:
+        populate_demo_users(db)
         populate_database(db)
     yield
 
