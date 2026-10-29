@@ -3,8 +3,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import estoque
+from app.auth.dependencies import get_current_user, require_csrf, require_roles
 from app.database import get_db
-from app.models import Order, Product
+from app.models import Order, Product, User, UserRole
 from app.schemas import (
     MessageResponse,
     OrderCreate,
@@ -16,6 +17,10 @@ from app.schemas import (
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
+# customer so cria e ve os proprios pedidos, staff atende, admin pode tudo
+equipe = [Depends(require_roles(UserRole.ADMIN, UserRole.STAFF)), Depends(require_csrf)]
+somente_admin = [Depends(require_roles(UserRole.ADMIN)), Depends(require_csrf)]
+
 
 def find_order(order_id: int, db: Session) -> Order:
     order = db.get(Order, order_id)
@@ -25,6 +30,14 @@ def find_order(order_id: int, db: Session) -> Order:
             detail=f"Pedido com ID {order_id} não encontrado.",
         )
     return order
+
+
+def check_owner(order: Order, user: User) -> None:
+    if user.role == UserRole.CUSTOMER and order.user_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Você só pode ver os seus próprios pedidos.",
+        )
 
 
 def find_product(product_id: int, db: Session) -> Product:
@@ -54,8 +67,11 @@ def list_orders(
     order_status: OrderStatus | None = Query(default=None, alias="status"),
     is_takeaway: bool | None = None,
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     query = select(Order)
+    if user.role == UserRole.CUSTOMER:
+        query = query.where(Order.user_id == user.id)
     if order_status is not None:
         query = query.where(Order.status == order_status)
     if is_takeaway is not None:
@@ -69,8 +85,14 @@ def list_orders(
     responses={404: {"model": MessageResponse}},
     summary="Mostrar um pedido",
 )
-def get_order(order_id: int, db: Session = Depends(get_db)):
-    return find_order(order_id, db)
+def get_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    order = find_order(order_id, db)
+    check_owner(order, user)
+    return order
 
 
 @router.post(
@@ -78,9 +100,14 @@ def get_order(order_id: int, db: Session = Depends(get_db)):
     response_model=OrderResponse,
     status_code=status.HTTP_201_CREATED,
     responses={404: {"model": MessageResponse}},
+    dependencies=[Depends(get_current_user), Depends(require_csrf)],
     summary="Criar pedido",
 )
-def create_order(data: OrderCreate, db: Session = Depends(get_db)):
+def create_order(
+    data: OrderCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     product = find_product(data.product_id, db)
     ensure_available(product)
     if estoque.estoque_url():
@@ -95,6 +122,7 @@ def create_order(data: OrderCreate, db: Session = Depends(get_db)):
     order = Order(
         **data.model_dump(),
         total_amount=calculate_total(product, data.quantity),
+        user_id=user.id,
     )
     db.add(order)
     db.commit()
@@ -106,6 +134,7 @@ def create_order(data: OrderCreate, db: Session = Depends(get_db)):
     "/{order_id}",
     response_model=OrderResponse,
     responses={404: {"model": MessageResponse}},
+    dependencies=somente_admin,
     summary="Substituir pedido",
 )
 def replace_order(order_id: int, data: OrderCreate, db: Session = Depends(get_db)):
@@ -124,6 +153,7 @@ def replace_order(order_id: int, data: OrderCreate, db: Session = Depends(get_db
     "/{order_id}",
     response_model=OrderResponse,
     responses={404: {"model": MessageResponse}},
+    dependencies=equipe,
     summary="Editar parcialmente um pedido",
 )
 def update_order(order_id: int, data: OrderUpdate, db: Session = Depends(get_db)):
@@ -147,6 +177,7 @@ def update_order(order_id: int, data: OrderUpdate, db: Session = Depends(get_db)
     "/{order_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     responses={404: {"model": MessageResponse}},
+    dependencies=somente_admin,
     summary="Apagar pedido",
 )
 def delete_order(order_id: int, db: Session = Depends(get_db)):

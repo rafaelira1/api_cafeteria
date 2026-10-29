@@ -44,3 +44,16 @@ def migrate_product_description() -> None:
             connection.execute(
                 text("ALTER TABLE products ADD COLUMN description VARCHAR(1000)")
             )
+
+
+def migrate_order_user_id() -> None:
+    """Adiciona o dono do pedido em bancos que ja existem, sem perder dados."""
+    with engine.begin() as connection:
+        columns = inspect(connection).get_columns("orders")
+        if not any(column["name"] == "user_id" for column in columns):
+            connection.execute(
+                text(
+                    "ALTER TABLE orders ADD COLUMN user_id INTEGER "
+                    "REFERENCES users(id) ON DELETE SET NULL"
+                )
+            )

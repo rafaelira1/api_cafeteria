@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.auth.config import AuthSettings, LOCAL_HOSTS, get_auth_settings
 from app.auth.security import authentication_error, decode_access_token, validate_csrf_token
 from app.database import get_db
-from app.models import User
+from app.models import User, UserRole
 
 
 def require_auth_transport(
@@ -41,6 +41,17 @@ def get_current_user(
         raise authentication_error()
     # The database is authoritative for both activity and the current role.
     return user
+
+
+def require_roles(*roles: UserRole):
+    """Deixa passar so os perfis informados. Sem login da 401, perfil errado da 403."""
+
+    def checker(user: User = Depends(get_current_user)) -> User:
+        if user.role not in roles:
+            raise HTTPException(status_code=403, detail="Você não tem permissão para essa ação.")
+        return user
+
+    return checker
 
 
 def csrf_binding(request: Request, settings: AuthSettings) -> str:

@@ -5,10 +5,11 @@ import warnings
 import pytest
 from argon2 import PasswordHasher
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, inspect, select
+from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.orm import sessionmaker
 
 from app.auth.config import get_auth_settings
+from app.auth.dependencies import get_current_user
 from app.create_demo_users import _secure_password, create_demo_users
 from app.database import Base
 from app.models import Order, Product, User, UserRole
@@ -94,16 +95,24 @@ def test_startup_adds_user_table_and_preserves_existing_products_and_orders(tmp_
     )
     factory = sessionmaker(bind=temp_engine)
     Product.__table__.create(temp_engine)
-    Order.__table__.create(temp_engine)
+    # tabela de pedidos como era antes do user_id
+    with temp_engine.begin() as connection:
+        connection.execute(text(
+            "CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_name VARCHAR(100) NOT NULL, "
+            "table_number INTEGER NOT NULL, payment_method VARCHAR(30) NOT NULL, "
+            "total_amount FLOAT NOT NULL, quantity INTEGER NOT NULL, status VARCHAR(20) NOT NULL, "
+            "is_takeaway BOOLEAN NOT NULL, product_id INTEGER NOT NULL REFERENCES products(id))"
+        ))
     with factory() as db:
         db.add(Product(
             id=42, name="Produto existente", description="Preservar descrição", category="Bebidas",
             price=7.5, size="100ml", is_available=True, calories=1,
         ))
         db.flush()
-        db.add(Order(
-            id=42, customer_name="Cliente existente", table_number=3, payment_method="Pix",
-            total_amount=15, quantity=2, status="pending", is_takeaway=False, product_id=42,
+        db.execute(text(
+            "INSERT INTO orders (id, customer_name, table_number, payment_method, total_amount, "
+            "quantity, status, is_takeaway, product_id) "
+            "VALUES (42, 'Cliente existente', 3, 'Pix', 15, 2, 'pending', 0, 42)"
         ))
         db.commit()
     assert "users" not in inspect(temp_engine).get_table_names()
@@ -117,16 +126,22 @@ def test_startup_adds_user_table_and_preserves_existing_products_and_orders(tmp_
     monkeypatch.setattr(database, "SessionLocal", factory)
     monkeypatch.setattr(main, "engine", temp_engine)
     monkeypatch.setattr(main, "SessionLocal", factory)
+    main.app.dependency_overrides[get_current_user] = lambda: User(
+        name="Admin", email="admin@teste.com", role=UserRole.ADMIN, is_active=True
+    )
     try:
         with TestClient(main.app) as client:
             assert "users" in inspect(temp_engine).get_table_names()
             assert [item["id"] for item in client.get("/products").json()] == [42]
             assert [item["id"] for item in client.get("/orders").json()] == [42]
+            colunas = [c["name"] for c in inspect(temp_engine).get_columns("orders")]
+            assert "user_id" in colunas
         with factory() as db:
             assert db.get(Product, 42).description == "Preservar descrição"
             assert db.get(Order, 42).total_amount == 15
             assert db.scalar(select(User)) is None
     finally:
+        main.app.dependency_overrides.pop(get_current_user, None)
         temp_engine.dispose()
         get_auth_settings.cache_clear()
 

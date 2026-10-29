@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app import estoque
+from app.auth.dependencies import require_roles
 from app.database import get_db
-from app.models import Product
+from app.models import Product, UserRole
 from app.schemas import MessageResponse
 
 
@@ -16,6 +17,7 @@ router = APIRouter(prefix="/products", tags=["Estoque"])
         404: {"model": MessageResponse},
         503: {"model": MessageResponse},
     },
+    dependencies=[Depends(require_roles(UserRole.ADMIN, UserRole.STAFF))],
     summary="Mostrar o produto com os dados do estoque externo",
 )
 def product_with_stock(product_id: int, db: Session = Depends(get_db)):
