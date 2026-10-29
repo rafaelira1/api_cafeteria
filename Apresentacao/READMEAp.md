@@ -201,9 +201,13 @@ Pontos fracos
 Quando **não** usar essa abordagem:
 
 1 . Apps mobile nativos, desktop e integrações servidor a servidor. Nesses casos não há navegador gerenciando cookies, e o padrão é o token no cabeçalho Authorization: Bearer, guardado em armazenamento seguro (Keychain, Keystore).
+
 2 . APIs públicas consumidas por terceiros. Clientes externos esperam chaves de API ou OAuth com Bearer token, não cookies.
+
 3 . Quando a revogação imediata é obrigatória. Sistemas bancários, financeiros ou com dados sensíveis costumam se sair melhor com sessão tradicional no servidor (session ID opaco em cookie HttpOnly), que pode ser derrubada na hora.
+
 4 . Aplicação web simples com um único back-end. Se não há microsserviços nem necessidade de autenticação sem estado, a sessão clássica no servidor é mais simples, menor e mais fácil de revogar. O JWT só acrescenta complexidade.
+
 5 . Cenários com muitos domínios ou embutidos em iframe. Widgets incorporados em sites de terceiros sofrem com o bloqueio de cookies de terceiros.
 
 ### Implementação
