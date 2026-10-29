@@ -3,7 +3,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.auth.config import get_auth_settings
-from app.database import Base, SessionLocal, engine, migrate_product_description
+from app.database import (
+    Base,
+    SessionLocal,
+    engine,
+    migrate_order_user_id,
+    migrate_product_description,
+)
 from app.routers import auth, orders, products, stock
 from app.seed import populate_database
 
@@ -14,6 +20,7 @@ async def lifespan(app: FastAPI):
     get_auth_settings()  # Refuse startup without a strong key and explicit origins.
     Base.metadata.create_all(bind=engine)
     migrate_product_description()
+    migrate_order_user_id()
     with SessionLocal() as db:
         populate_database(db)
     yield

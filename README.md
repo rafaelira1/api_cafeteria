@@ -10,7 +10,7 @@ API REST desenvolvida em Python para gerenciar produtos do cardápio e pedidos d
 - SQLite
 - Uvicorn
 
-A autenticação utiliza JWT em cookie HttpOnly. Produtos e pedidos continuam públicos nesta etapa; a integração de autenticação e permissões nesses recursos fica para os demais integrantes.
+A autenticação utiliza JWT em cookie HttpOnly. O cardápio (`GET /products`) é público e o resto exige login, com permissões por perfil (veja a seção Permissões).
 
 ## Armazenamento local
 
@@ -142,9 +142,49 @@ Um produto pode estar relacionado a vários pedidos. Um pedido referencia exatam
 
 Possíveis respostas de erro:
 
+- `401 Unauthorized`: sem login.
+- `403 Forbidden`: perfil sem permissão ou CSRF inválido.
 - `404 Not Found`: produto ou pedido inexistente.
 - `409 Conflict`: tentativa de apagar um produto que possui pedidos vinculados.
 - `422 Unprocessable Entity`: corpo JSON ausente, incompleto ou com valores inválidos.
+
+## Permissões
+
+Existem três perfis: `admin`, `staff` (funcionário) e `customer` (cliente). Quem se cadastra pela API sempre vira `customer`. Admin e staff são criados com o `create_demo_users`.
+
+| Rota | Sem login | customer | staff | admin |
+| --- | --- | --- | --- | --- |
+| `GET /products` e `GET /products/{id}` | sim | sim | sim | sim |
+| `POST`, `PUT`, `PATCH`, `DELETE /products` | 401 | 403 | 403 | sim |
+| `GET /products/{id}/estoque` | 401 | 403 | sim | sim |
+| `GET /orders` | 401 | só os dele | todos | todos |
+| `GET /orders/{id}` | 401 | só se for dele (senão 403) | sim | sim |
+| `POST /orders` | 401 | sim | sim | sim |
+| `PATCH /orders/{id}` | 401 | 403 | sim | sim |
+| `PUT` e `DELETE /orders/{id}` | 401 | 403 | 403 | sim |
+
+Regras:
+
+- O pedido guarda quem o criou (`user_id`). Pedidos do seed ficam sem dono, então só staff e admin enxergam.
+- As rotas que alteram dados (`POST`, `PUT`, `PATCH`, `DELETE`) também exigem o CSRF, igual ao login: cabeçalhos `Origin` e `X-CSRF-Token` mais o cookie.
+- Ordem das verificações: primeiro o login (401), depois o perfil (403) e por último o CSRF (403).
+- O perfil é lido do banco a cada requisição, então mudar o perfil de um usuário vale na hora.
+- Ao subir a API em um banco que já existe, a coluna `user_id` é adicionada na tabela de pedidos sem apagar nada.
+
+Exemplo de erros (depois de logar como `customer`, com `$JAR` e `$CSRF` do exemplo de autenticação):
+
+```bash
+# sem cookie: 401
+curl -i http://127.0.0.1:8000/orders
+
+# cliente tentando apagar produto: 403
+curl -i -b "$JAR" -X DELETE http://127.0.0.1:8000/products/1   -H "Origin: $ORIGIN" -H "X-CSRF-Token: $CSRF"
+
+# cliente criando pedido: 201
+curl -i -b "$JAR" -X POST http://127.0.0.1:8000/orders   -H "Origin: $ORIGIN" -H "X-CSRF-Token: $CSRF" -H "Content-Type: application/json"   -d '{"customer_name":"Ana","table_number":3,"payment_method":"Pix","quantity":1,"is_takeaway":false,"product_id":1}'
+```
+
+Os exemplos de curl da seção de Exemplos de uso mais acima mostram só o corpo das requisições. As que alteram dados precisam do login e do CSRF como acima.
 
 ## Exemplos de uso
 
@@ -408,7 +448,7 @@ def alterar(user: User = Depends(get_current_user)):
     return {"user_id": user.id}
 ```
 
-`get_current_user` valida somente o cookie JWT, confirma existência/atividade no banco e entrega o perfil atual. Combine-a com `require_csrf` nas futuras operações autenticadas que alterarem dados. Matriz de permissões, propriedade de pedidos, proteção dos CRUDs existentes e administração de usuários ficam para os colegas.
+`get_current_user` valida somente o cookie JWT, confirma existência/atividade no banco e entrega o perfil atual. Combine-a com `require_csrf` nas futuras operações autenticadas que alterarem dados. A matriz de permissões e a proteção dos CRUDs estão na seção Permissões abaixo. Não existe gerenciamento de usuários pela API.
 
 ## Integração com a API de estoque
 

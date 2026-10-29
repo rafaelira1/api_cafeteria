@@ -76,4 +76,9 @@ class Order(Base):
         ForeignKey("products.id", ondelete="RESTRICT"), nullable=False, index=True
     )
 
+    # quem criou o pedido, vazio nos pedidos antigos do seed
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
     product: Mapped[Product] = relationship(back_populates="orders")

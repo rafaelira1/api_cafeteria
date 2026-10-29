@@ -3,12 +3,16 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.auth.dependencies import require_csrf, require_roles
 from app.database import get_db
-from app.models import Product
+from app.models import Product, UserRole
 from app.schemas import MessageResponse, ProductCreate, ProductResponse, ProductUpdate
 
 
 router = APIRouter(prefix="/products", tags=["Products"])
+
+# o cardapio e publico, so o admin mexe nos produtos
+somente_admin = [Depends(require_roles(UserRole.ADMIN)), Depends(require_csrf)]
 
 
 def find_product(product_id: int, db: Session) -> Product:
@@ -49,6 +53,7 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
     "",
     response_model=ProductResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=somente_admin,
     summary="Criar produto",
 )
 def create_product(data: ProductCreate, db: Session = Depends(get_db)):
@@ -63,6 +68,7 @@ def create_product(data: ProductCreate, db: Session = Depends(get_db)):
     "/{product_id}",
     response_model=ProductResponse,
     responses={404: {"model": MessageResponse}},
+    dependencies=somente_admin,
     summary="Substituir produto",
 )
 def replace_product(
@@ -80,6 +86,7 @@ def replace_product(
     "/{product_id}",
     response_model=ProductResponse,
     responses={404: {"model": MessageResponse}},
+    dependencies=somente_admin,
     summary="Editar parcialmente um produto",
 )
 def update_product(
@@ -100,6 +107,7 @@ def update_product(
         404: {"model": MessageResponse},
         409: {"model": MessageResponse},
     },
+    dependencies=somente_admin,
     summary="Apagar produto",
 )
 def delete_product(product_id: int, db: Session = Depends(get_db)):
