@@ -4,7 +4,7 @@ from fastapi import FastAPI
 
 from app.auth.config import get_auth_settings
 from app.database import Base, SessionLocal, engine, migrate_product_description
-from app.routers import auth, orders, products
+from app.routers import auth, orders, products, stock
 from app.seed import populate_database
 
 
@@ -30,6 +30,7 @@ app = FastAPI(
 )
 
 app.include_router(products.router)
+app.include_router(stock.router)
 app.include_router(orders.router)
 app.include_router(auth.router)
 

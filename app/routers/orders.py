@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import estoque
 from app.database import get_db
 from app.models import Order, Product
 from app.schemas import (
@@ -82,6 +83,15 @@ def get_order(order_id: int, db: Session = Depends(get_db)):
 def create_order(data: OrderCreate, db: Session = Depends(get_db)):
     product = find_product(data.product_id, db)
     ensure_available(product)
+    if estoque.estoque_url():
+        # confere o estoque externo e depois desconta a quantidade do pedido
+        stock = estoque.consultar_estoque(product.id)
+        if stock["quantity"] < data.quantity:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Estoque insuficiente de '{product.name}'.",
+            )
+        estoque.dar_baixa(product.id, data.quantity)
     order = Order(
         **data.model_dump(),
         total_amount=calculate_total(product, data.quantity),
