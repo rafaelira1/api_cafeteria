@@ -34,9 +34,9 @@ Para usar a API, você cria uma conta e faz login. O sistema identifica quem voc
 | Perfil | Quem é | Como é criado |
 | --- | --- | --- |
 | Visitante | Quem não fez login | — |
-| `customer` | Cliente da cafeteria | Pelo cadastro público (`POST /auth/register`) |
-| `staff` | Funcionário | Pelo comando `python -m app.create_demo_users` |
-| `admin` | Administrador | Pelo comando `python -m app.create_demo_users` |
+| `customer` | Cliente da cafeteria | Pelo cadastro público (`POST /auth/register`) ou pela criação das contas de demonstração |
+| `staff` | Funcionário | Na inicialização, com `DEMO_USERS_ENABLED=true`, ou pelo comando `python -m app.create_demo_users` |
+| `admin` | Administrador | Na inicialização, com `DEMO_USERS_ENABLED=true`, ou pelo comando `python -m app.create_demo_users` |
 
 O cadastro público **sempre** cria um `customer`. Se você tentar enviar o campo `role` no cadastro, a API responde `422`.
 
@@ -235,10 +235,11 @@ app/
 │   ├── products.py      # cardápio público; alterações só para admin
 │   ├── orders.py        # pedidos com regras por perfil
 │   └── stock.py         # produto + estoque externo
+├── bootstrap_demo_users.py # cria contas de demonstração na inicialização, quando habilitado
 └── create_demo_users.py # cria os usuários admin, staff e customer pelo terminal
 ```
 
-As rotas são protegidas com dependências do FastAPI. Veja o trecho real de [app/routers/products.py](app/routers/products.py):
+As rotas são protegidas com dependências do FastAPI. Veja o trecho real de [app/routers/products.py](../app/routers/products.py):
 
 ```python
 # o cardapio e publico, so o admin mexe nos produtos
@@ -249,7 +250,7 @@ def create_product(data: ProductCreate, db: Session = Depends(get_db)):
     ...
 ```
 
-`require_roles` usa `get_current_user`, que lê o cookie, valida o JWT e busca o usuário no banco ([app/auth/dependencies.py](app/auth/dependencies.py)):
+`require_roles` usa `get_current_user`, que lê o cookie, valida o JWT e busca o usuário no banco ([app/auth/dependencies.py](../app/auth/dependencies.py)):
 
 ```python
 def get_current_user(...) -> User:
@@ -296,12 +297,12 @@ A ordem das verificações é sempre: login (`401`), depois perfil (`403`) e por
 
 **Outras proteções**
 
-- Os cookies usam `HttpOnly` e `SameSite=Lax`. Em HTTPS, também usam `Secure` e o prefixo `__Host-`.
+- Os cookies de autenticação e pré-autenticação usam `HttpOnly`. Os três cookies usam `SameSite=Lax` e, em HTTPS, também usam `Secure` e o prefixo `__Host-`; o cookie CSRF é acessível ao cliente.
 - Toda alteração exige o header `Origin` com um valor da lista `AUTH_ALLOWED_ORIGINS`.
 - As rotas de autenticação só funcionam em HTTPS. HTTP só é aceito em `localhost` quando o modo de desenvolvimento está ligado.
 - As respostas de `/auth/*` vêm com `Cache-Control: no-store`, para não ficarem em cache.
 
-Quer os detalhes técnicos? Leia o documento de arquitetura em [docs/arquitetura-autenticacao.pdf](docs/arquitetura-autenticacao.pdf).
+Os diagramas também estão disponíveis como imagens: [arquitetura](arquitetura.png), [login e CSRF](login.png) e [criação de pedido](pedido.png).
 
 ---
 
@@ -309,7 +310,7 @@ Quer os detalhes técnicos? Leia o documento de arquitetura em [docs/arquitetura
 
 ### O que você precisa
 
-- Python 3.11 ou mais novo
+- Python 3.12, versão definida em `.python-version` para o deploy
 - curl
 - No Windows, Git Bash para rodar os exemplos (eles usam sintaxe Bash)
 
@@ -339,13 +340,15 @@ python -m uvicorn estoque_api.main:app --port 8001
 python -m uvicorn app.main:app --reload --env-file .env
 ```
 
-**3. Crie os usuários `admin` e `staff`:**
+**3. Crie os usuários de demonstração:**
 
 ```bash
 python -m app.create_demo_users --env-file .env
 ```
 
-O comando pede nome, email e senha de três usuários: `admin`, `staff` e `customer`. Para os exemplos abaixo funcionarem sem mudanças, use:
+No Render, os três perfis são criados automaticamente na inicialização com `DEMO_USERS_ENABLED=true` e as seis variáveis de email e senha descritas abaixo. Localmente, você também pode usar essa configuração no `.env` e reiniciar a cafeteria. O comando acima continua disponível como alternativa interativa e pede nome, email e senha para cada perfil.
+
+Para os exemplos locais abaixo funcionarem sem mudanças, use:
 
 | Perfil | Email | Senha |
 | --- | --- | --- |
@@ -369,9 +372,16 @@ Essas senhas servem só para testar no seu computador. Nunca use uma senha real 
 | `AUTH_LOGIN_MAX_ATTEMPTS` | não | `5` | Tentativas de login por IP dentro da janela |
 | `AUTH_LOGIN_WINDOW_SECONDS` | não | `60` | Tamanho da janela de tentativas, em segundos |
 | `DATABASE_URL` | não | `sqlite:///./cafeteria.db` | Endereço do banco |
-| `ESTOQUE_API_URL` | não | vazio | Endereço da API de estoque. Vazio desliga a integração. |
+| `ESTOQUE_API_URL` | não | vazio | Endereço base da API de estoque, sem `/estoque`. Vazio desliga a integração. |
+| `DEMO_USERS_ENABLED` | não | `false` | `true` habilita a criação de admin, staff e customer na inicialização. |
+| `DEMO_ADMIN_EMAIL` | com a criação automática habilitada | — | Email exclusivo da conta admin de demonstração. |
+| `DEMO_ADMIN_PASSWORD` | com a criação automática habilitada | — | Senha do admin, entre 12 e 128 caracteres. |
+| `DEMO_STAFF_EMAIL` | com a criação automática habilitada | — | Email exclusivo da conta staff de demonstração. |
+| `DEMO_STAFF_PASSWORD` | com a criação automática habilitada | — | Senha do staff, entre 12 e 128 caracteres. |
+| `DEMO_CUSTOMER_EMAIL` | com a criação automática habilitada | — | Email exclusivo da conta customer de demonstração. |
+| `DEMO_CUSTOMER_PASSWORD` | com a criação automática habilitada | — | Senha do customer, entre 12 e 128 caracteres. |
 
-O `.env.example` já vem pronto para rodar no seu computador (modo `development` com HTTP local).
+O `.env.example` configura o modo `development` com HTTP local e deixa a criação automática de usuários desabilitada. Quando ela é habilitada, os três emails precisam ser diferentes. As contas ausentes são criadas em uma transação, com senha protegida pelo hash existente. Contas já cadastradas conservam suas senhas e seus perfis; alterar uma variável de senha não troca a senha de uma conta existente. Um email já associado a outro perfil ou a uma conta inativa interrompe a inicialização, sem promover a conta automaticamente.
 
 ### Exemplos de requisições
 
@@ -533,7 +543,7 @@ Lembre-se: busque um token CSRF **novo depois do login**. O token de antes do lo
 
 1. Deixe o gerenciamento de cookies ligado (ele vem ligado por padrão).
 2. Faça `GET {{base}}/auth/csrf` e copie o valor de `csrf_token`.
-3. Nas requisições `POST`, `PUT`, `PATCH` e `DELETE`, adicione os headers `X-CSRF-Token: <token>` e `Origin: http://127.0.0.1:8000`.
+3. Nas requisições `POST`, `PUT`, `PATCH` e `DELETE`, adicione os headers `X-CSRF-Token: <token>` e `Origin` com a origem em uso: `http://127.0.0.1:8000` localmente ou `https://cafeteria-api-k9jm.onrender.com` na versão publicada.
 4. Depois do login, repita o passo 2 e troque o token.
 5. Não configure "Bearer Token" na aba Authorization. A API não usa esse header.
 
@@ -619,33 +629,96 @@ Resumo dos códigos de erro:
 
 ### Versão publicada (deploy)
 
-<!-- Preencher após o deploy: substituir <URL_DO_DEPLOY> e <URL_DO_ESTOQUE> pelos endereços reais. -->
+As duas APIs estão publicadas como Web Services no Render, usando o mesmo repositório e a branch `main`:
 
-- **Cafeteria API:** `<URL_DO_DEPLOY>`
-- **Documentação interativa:** `<URL_DO_DEPLOY>/docs`
-- **API de estoque:** `<URL_DO_ESTOQUE>`
+- **Cafeteria API:** [https://cafeteria-api-k9jm.onrender.com](https://cafeteria-api-k9jm.onrender.com)
+- **Documentação da cafeteria:** [Swagger](https://cafeteria-api-k9jm.onrender.com/docs)
+- **Saúde da cafeteria:** [GET /health](https://cafeteria-api-k9jm.onrender.com/health)
+- **API de estoque:** [https://cafeteria-estoque.onrender.com](https://cafeteria-estoque.onrender.com)
+- **Documentação do estoque:** [Swagger](https://cafeteria-estoque.onrender.com/docs)
+- **Saúde do estoque:** [GET /health](https://cafeteria-estoque.onrender.com/health)
+
+**Como publicar no Render**
+
+1. No painel do Render, crie dois Web Services a partir do repositório `rafaelira1/api_cafeteria`, com linguagem Python e branch `main`.
+2. Deixe o campo Root Directory vazio nos dois serviços. O arquivo `.python-version` da raiz seleciona Python 3.12.
+3. Publique primeiro o estoque e confira seu `/health`. Depois configure a cafeteria com a URL base do estoque.
+4. Use as configurações abaixo e defina as variáveis da cafeteria na página Environment antes de concluir seu deploy.
+
+| Configuração | Cafeteria API | Estoque API |
+| --- | --- | --- |
+| Plano | Free | Free |
+| Build Command | `pip install -r requirements.txt` | `pip install -r estoque_api/requirements.txt` |
+| Start Command | `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1` | `uvicorn estoque_api.main:app --host 0.0.0.0 --port $PORT --workers 1` |
+| Health Check Path | `/health` | `/health` |
+
+O `$PORT` é fornecido pelo Render. O estoque usa um único worker porque seus dados ficam em memória e cada processo teria quantidades próprias. O mock atual não precisa das variáveis de autenticação da cafeteria.
+
+**Variáveis de ambiente no Render**
+
+Na página Environment do serviço da cafeteria, configure:
+
+| Variável | Configuração |
+| --- | --- |
+| `AUTH_ENVIRONMENT` | `production` |
+| `AUTH_ALLOW_INSECURE_HTTP` | `false` |
+| `AUTH_ALLOWED_ORIGINS` | `https://cafeteria-api-k9jm.onrender.com` |
+| `AUTH_JWT_SECRET` | Chave aleatória gerada pelo comando abaixo; manter somente no ambiente. |
+| `DATABASE_URL` | `sqlite:///./cafeteria.db` |
+| `ESTOQUE_API_URL` | `https://cafeteria-estoque.onrender.com` |
+| `DEMO_USERS_ENABLED` | `true` |
+| `DEMO_ADMIN_EMAIL` e `DEMO_ADMIN_PASSWORD` | Email e senha escolhidos para o admin. |
+| `DEMO_STAFF_EMAIL` e `DEMO_STAFF_PASSWORD` | Email e senha escolhidos para o staff. |
+| `DEMO_CUSTOMER_EMAIL` e `DEMO_CUSTOMER_PASSWORD` | Email e senha escolhidos para o customer. |
+
+Gere a chave de assinatura localmente e copie apenas o resultado para `AUTH_JWT_SECRET`:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+`AUTH_ALLOWED_ORIGINS` recebe a origem HTTPS completa, sem `/` no final ou caminhos como `/docs`. `ESTOQUE_API_URL` recebe somente a URL base do mock, sem `/estoque`. As credenciais das contas publicadas são definidas no ambiente do Render e fornecidas pela equipe para a demonstração; os exemplos de senha deste documento são para uso local.
+
+O `.env` local não é enviado ao GitHub. Depois de editar as variáveis no painel, salve e faça o deploy para aplicá-las. Sem chave válida ou origens permitidas, a cafeteria recusa a inicialização.
+
+**Inicialização e dados de demonstração**
+
+O lifespan em `app/main.py` cria as tabelas, aplica as migrações existentes, chama `populate_demo_users(db)` e depois `populate_database(db)`. Com a opção habilitada, o bootstrap cria as contas ausentes de admin, staff e customer a partir das variáveis `DEMO_*`. O seed insere três produtos e três pedidos quando as respectivas tabelas estão vazias. Os pedidos iniciais não têm dono e são visíveis apenas a staff e admin.
+
+O serviço gratuito utiliza armazenamento local efêmero: reinícios, novos deploys ou suspensão por inatividade podem apagar o SQLite e os dados cadastrados. Na próxima inicialização, o banco e as contas de demonstração são reconstruídos com a configuração do ambiente. O estoque também volta às quantidades iniciais ao reiniciar, pois fica em memória e não é persistido junto com o banco da cafeteria.
+
+Antes da apresentação, abra o `/health` do estoque e espere responder; depois faça o mesmo com a cafeteria. O primeiro acesso após inatividade pode demorar, e a chamada da cafeteria para o estoque tem timeout de 5 segundos.
 
 **Como testar online**
 
-1. Abra `<URL_DO_DEPLOY>/docs` para ver todos os endpoints. Os endpoints públicos, como `GET /products`, já funcionam por lá.
-2. Para testar o login e as rotas protegidas, use o mesmo roteiro de curl acima e troque só as duas primeiras variáveis:
+1. Abra os links `/health` das duas APIs. Ambos devem responder `200` com `{"status":"ok"}`.
+2. Abra a documentação da cafeteria para consultar os endpoints. Para os exemplos de curl deste documento, configure:
 
    ```bash
-   BASE=<URL_DO_DEPLOY>
-   ORIGIN=<URL_DO_DEPLOY>
+   BASE=https://cafeteria-api-k9jm.onrender.com
+   ORIGIN=https://cafeteria-api-k9jm.onrender.com
    ```
 
-3. Online, a API roda em HTTPS. Os cookies passam a se chamar `__Host-cafeteria_auth`, `__Host-cafeteria_csrf` e `__Host-cafeteria_preauth`. O arquivo de cookies do curl cuida disso sozinho.
+3. Use as credenciais configuradas no Render. Obtenha `GET /auth/csrf`, preserve os cookies e faça `POST /auth/login` com `Origin`, `X-CSRF-Token` e o JSON com email e senha. Confirme o perfil em `GET /auth/me` e obtenha um CSRF novo após cada login antes de alterar dados.
+4. Como admin e staff, faça `GET /products/1/estoque`: deve responder `200` com produto e estoque. Anote `stock.quantity` antes de criar um pedido.
+5. Como customer, a mesma consulta deve responder `403`. Com o CSRF da sessão, crie um pedido de uma unidade do produto 1: deve responder `201`. Em `GET /orders`, confira o pedido criado e a ausência dos pedidos de outras contas. Pedidos anteriores dessa mesma conta podem aparecer.
+6. Entre novamente como staff e consulte o estoque: a quantidade deve ter diminuído em uma unidade, desde que não ocorram outros pedidos ou reinícios durante a comparação.
+7. Para conferir logout, faça `POST /auth/logout` com cookies, origem e CSRF atualizado. A resposta esperada é `204`; a próxima consulta a `/auth/me` deve responder `401`. Após reiniciar o serviço, confira `/health`, os dados iniciais e o login das contas configuradas.
 
-Configuração necessária no servidor publicado:
+As verificações manuais de permissões e integração realizadas no Postman tiveram os seguintes resultados:
 
-```env
-AUTH_ENVIRONMENT=production
-AUTH_ALLOW_INSECURE_HTTP=false
-AUTH_ALLOWED_ORIGINS=<URL_DO_DEPLOY>
-AUTH_JWT_SECRET=<chave gerada com secrets.token_urlsafe(48)>
-ESTOQUE_API_URL=<URL_DO_ESTOQUE>
-```
+| Teste | Resultado |
+| --- | --- |
+| Admin e staff consultando `GET /products/1/estoque` | `200 OK` |
+| Customer consultando `GET /products/1/estoque` | `403 Forbidden` |
+| Customer criando um pedido em `POST /orders` | `201 Created`, com redução correspondente no estoque |
+| Customer consultando `GET /orders` | Apenas os pedidos da própria conta |
+
+Em HTTPS, os cookies usam os nomes `__Host-cafeteria_auth`, `__Host-cafeteria_csrf` e `__Host-cafeteria_preauth`, com `Secure`, `Path=/`, `SameSite=lax` e sem atributo `Domain`. Autenticação e pré-autenticação também usam `HttpOnly`; o cookie CSRF é separado e acessível ao cliente.
+
+No Postman, confira esses atributos no header `Set-Cookie` da resposta de login. O gerenciador de cookies não suporta `SameSite` nem a semântica dos prefixos `__Host-`; a aceitação desses atributos pelo navegador deve ser conferida em suas ferramentas de desenvolvimento.
+
+Referências: [publicação FastAPI no Render](https://render.com/docs/deploy-fastapi), [variáveis de ambiente](https://render.com/docs/configure-environment-variables), [limitações do plano gratuito](https://render.com/docs/free) e [cookies no Postman](https://learning.postman.com/docs/use/send-requests/response-data/cookies/).
 
 ### Rodar os testes automatizados
 
@@ -662,9 +735,9 @@ Os testes usam bancos temporários e chaves de teste. Você não precisa de um `
 
 ### Como a API se integra com o sistema externo
 
-O estoque fica em uma API separada, a **Estoque API** ([estoque_api/main.py](estoque_api/main.py)). Ela roda em outro processo (porta 8001) e guarda os dados em memória. O id de cada item de estoque é o mesmo id do produto na cafeteria.
+O estoque fica em uma API separada, a **Estoque API** ([estoque_api/main.py](../estoque_api/main.py)). Ela roda em outro processo (porta 8001) e guarda os dados em memória. O id de cada item de estoque é o mesmo id do produto na cafeteria.
 
-A Cafeteria API chama a Estoque API pelo módulo [app/estoque.py](app/estoque.py), usando `httpx` com timeout de 5 segundos. O endereço vem da variável `ESTOQUE_API_URL`. Se ela estiver vazia, a integração fica desligada: os pedidos são criados sem consultar o estoque, e `GET /products/{id}/estoque` responde `503`. O diagrama de [arquitetura](#arquitetura) mostra onde cada parte fica.
+A Cafeteria API chama a Estoque API pelo módulo [app/estoque.py](../app/estoque.py), usando `httpx` com timeout de 5 segundos. O endereço vem da variável `ESTOQUE_API_URL`. Se ela estiver vazia, a integração fica desligada: os pedidos são criados sem consultar o estoque, e `GET /products/{id}/estoque` responde `503`. O diagrama de [arquitetura](#arquitetura) mostra onde cada parte fica.
 
 Os erros da Estoque API são traduzidos para quem chamou a Cafeteria API:
 
