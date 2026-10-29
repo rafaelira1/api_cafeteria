@@ -40,6 +40,9 @@ cafeteria-api/
 │   ├── models.py
 │   ├── schemas.py
 │   └── seed.py
+├── estoque_api/
+│   ├── main.py
+│   └── requirements.txt
 ├── tests/
 │   ├── conftest.py
 │   ├── test_api.py
@@ -406,6 +409,33 @@ def alterar(user: User = Depends(get_current_user)):
 ```
 
 `get_current_user` valida somente o cookie JWT, confirma existência/atividade no banco e entrega o perfil atual. Combine-a com `require_csrf` nas futuras operações autenticadas que alterarem dados. Matriz de permissões, propriedade de pedidos, proteção dos CRUDs existentes e administração de usuários ficam para os colegas.
+
+## Integração com a API de estoque
+
+A cafeteria consulta uma segunda API, a `estoque_api` (pasta `estoque_api/`), que guarda a quantidade de ingredientes de cada produto. Os dados dela ficam em memória e o id do estoque é o mesmo id do produto.
+
+Para rodar as duas APIs localmente, em dois terminais:
+
+```bash
+python -m uvicorn estoque_api.main:app --port 8001
+python -m uvicorn app.main:app --reload --env-file .env
+```
+
+A variável `ESTOQUE_API_URL` aponta para a API de estoque (`http://127.0.0.1:8001` no `.env.example`). Se ela estiver vazia a integração fica desligada e a cafeteria funciona como antes.
+
+Onde a cafeteria usa o estoque:
+
+- `GET /products/{id}/estoque`: busca o produto no banco local e o estoque na API externa, e devolve os dois juntos com o campo `can_sell` (produto ativo no cardápio e com estoque maior que zero).
+- `POST /orders`: antes de criar o pedido consulta o estoque (`GET /estoque/{id}`) e depois desconta a quantidade (`POST /estoque/{id}/baixa`). Com estoque insuficiente retorna `409`.
+- Se a API de estoque estiver fora do ar, retorna `503`.
+
+Endpoints da API de estoque: `GET /estoque`, `GET /estoque/{product_id}` e `POST /estoque/{product_id}/baixa` com `{"quantity": 2}`.
+
+Exemplo:
+
+```bash
+curl http://127.0.0.1:8000/products/1/estoque
+```
 
 ## Publicação no GitHub
 
